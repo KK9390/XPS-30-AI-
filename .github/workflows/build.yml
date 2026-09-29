@@ -25,7 +25,7 @@ jobs:
 
     - name: Compile EXE
       # Make sure this matches your exact file name!
-      run: pyinstaller --onefile --console sysex_test.py 
+      run: pyinstaller --onefile --console --hidden-import mido.backends.rtmidi sysex_test.py
 
     - name: Upload EXE Artifact
       uses: actions/upload-artifact@v4  # Updated to v4
