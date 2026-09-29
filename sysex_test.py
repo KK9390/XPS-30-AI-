@@ -1,6 +1,7 @@
 import mido
 import time
-import argparse
+import tkinter as tk
+from tkinter import ttk
 
 class XPS30Engine:
     def __init__(self):
@@ -13,7 +14,7 @@ class XPS30Engine:
             "perf_reverb":  [0x10, 0x00, 0x20, 0x1E]
         }
         
-        # --- THE HARDWARE COMPLIANCE RULES ---
+        # Hardware Compliance Rules
         self.rules = {
             "patch_cutoff": {"min": -63, "max": 63,  "shift": 64},
             "patch_reverb": {"min": 0,   "max": 127, "shift": 0},
@@ -31,11 +32,7 @@ class XPS30Engine:
             return None
             
         rule = self.rules[param_name]
-        
-        # 1. Compliance Check: Clamp the value to the exact XPS-30 limits
         clamped_value = max(rule["min"], min(rule["max"], user_value))
-        
-        # 2. Hardware Translation: Convert negative screen values to SysEx payload bytes
         sysex_byte = clamped_value + rule["shift"]
             
         payload = self.address_map[param_name] + [sysex_byte]
@@ -44,49 +41,88 @@ class XPS30Engine:
         return mido.Message('sysex', data=self.header + payload + [checksum])
 
 # ==========================================
-# 🤖 AI COMMAND TRANSMITTER (SYSEX EXACT)
+# THE GUI APPLICATION
 # ==========================================
-def apply_ai_parameters(cutoff, effect):
-    synth = XPS30Engine()
-    
-    ports = mido.get_output_names()
-    target_port = next((p for p in ports if 'JUNO-DS 1' in p or 'XPS-30' in p), None)
-            
-    if not target_port:
-        print("Error: Keyboard not found.")
-        return
-
-    with mido.open_output(target_port) as outport:
-        print(f"\n🤖 Link Established to: {target_port}")
-        print(f"📡 Transmitting AI Analysis Data via SysEx Memory Overwrite...")
+class RolandApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Roland AI Bridge")
+        self.root.geometry("400x500")
+        self.root.configure(padx=20, pady=20)
         
-        if cutoff is not None:
-            print(f"   -> Setting Filter Cutoff memory to: {cutoff}")
-            # Blast to both modes so it works no matter what screen you are on
-            outport.send(synth.get_message("patch_cutoff", cutoff))
-            time.sleep(0.05)
-            outport.send(synth.get_message("perf_cutoff", cutoff))
-            time.sleep(0.05)
-            
-        if effect is not None:
-            print(f"   -> Setting Effect Level memory to: {effect}")
-            outport.send(synth.get_message("patch_reverb", effect))
-            time.sleep(0.05)
-            outport.send(synth.get_message("perf_reverb", effect))
-            time.sleep(0.05)
-            
-        print("✅ Success! Parameters written to Temporary Memory. The * should now be visible.")
+        self.synth = XPS30Engine()
 
-# ==========================================
-# THE ARGUMENT CATCHER
-# ==========================================
+        # Title
+        title = ttk.Label(root, text="Roland XPS-30 Tone Injector", font=("Segoe UI", 16, "bold"))
+        title.pack(pady=(0, 20))
+
+        # Cutoff Slider
+        ttk.Label(root, text="Filter Cutoff Offset (-64 to +63)", font=("Segoe UI", 10)).pack()
+        self.cutoff_var = tk.IntVar(value=0)
+        self.cutoff_slider = ttk.Scale(root, from_=-64, to=63, variable=self.cutoff_var, command=self.update_labels)
+        self.cutoff_slider.pack(fill='x', pady=5)
+        self.cutoff_label = ttk.Label(root, text="0", font=("Segoe UI", 12, "bold"), foreground="#0078D7")
+        self.cutoff_label.pack()
+
+        # Effect Slider
+        ttk.Label(root, text="Effect Level (0 to 127)", font=("Segoe UI", 10)).pack(pady=(15, 0))
+        self.effect_var = tk.IntVar(value=0)
+        self.effect_slider = ttk.Scale(root, from_=0, to=127, variable=self.effect_var, command=self.update_labels)
+        self.effect_slider.pack(fill='x', pady=5)
+        self.effect_label = ttk.Label(root, text="0", font=("Segoe UI", 12, "bold"), foreground="#0078D7")
+        self.effect_label.pack()
+
+        # Transmit Button
+        self.btn = ttk.Button(root, text="📡 Transmit AI Data to Synth", command=self.transmit)
+        self.btn.pack(pady=25, fill='x', ipady=5)
+
+        # Digital Log Screen
+        self.log_screen = tk.Text(root, height=8, bg="black", fg="#00FF00", font=("Consolas", 9), wrap="word")
+        self.log_screen.pack(fill='both', expand=True)
+        self.log("System Ready. Waiting for AI parameters...")
+
+    def update_labels(self, event=None):
+        self.cutoff_label.config(text=str(int(self.cutoff_var.get())))
+        self.effect_label.config(text=str(int(self.effect_var.get())))
+
+    def log(self, message):
+        self.log_screen.insert(tk.END, message + "\n")
+        self.log_screen.see(tk.END)
+        self.root.update()
+
+    def transmit(self):
+        cutoff = int(self.cutoff_var.get())
+        effect = int(self.effect_var.get())
+        
+        ports = mido.get_output_names()
+        target_port = next((p for p in ports if 'JUNO-DS 1' in p or 'XPS-30' in p), None)
+                
+        if not target_port:
+            self.log("\n❌ ERROR: XPS-30 not found. Check USB cable!")
+            return
+
+        with mido.open_output(target_port) as outport:
+            self.log(f"\n🤖 Connected: {target_port}")
+            self.log(f"-> Injecting Cutoff: {cutoff}")
+            outport.send(self.synth.get_message("patch_cutoff", cutoff))
+            time.sleep(0.05)
+            outport.send(self.synth.get_message("perf_cutoff", cutoff))
+            time.sleep(0.05)
+            
+            self.log(f"-> Injecting Effect: {effect}")
+            outport.send(self.synth.get_message("patch_reverb", effect))
+            time.sleep(0.05)
+            outport.send(self.synth.get_message("perf_reverb", effect))
+            
+            self.log("✅ Success! Memory overwritten.")
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Roland AI Bridge")
-    parser.add_argument('--cutoff', type=int, help='Filter Cutoff (0-127)')
-    parser.add_argument('--effect', type=int, help='Effect Level (0-127)')
-    args = parser.parse_args()
-
-    if args.cutoff is not None or args.effect is not None:
-        apply_ai_parameters(args.cutoff, args.effect)
-    else:
-        print("Run with --cutoff and --effect arguments from the command line!")
+    root = tk.Tk()
+    
+    # Make it look like a modern Windows app
+    style = ttk.Style()
+    if "vista" in style.theme_names():
+        style.theme_use("vista")
+        
+    app = RolandApp(root)
+    root.mainloop()
