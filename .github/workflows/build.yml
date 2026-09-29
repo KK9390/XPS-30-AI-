@@ -24,7 +24,7 @@ jobs:
         pip install mido python-rtmidi pyinstaller
 
     - name: Compile EXE
-      run: pyinstaller --onefile --console xps30_engine.py
+      run: pyinstaller --onefile --console sysex_test.py
 
     - name: Upload EXE Artifact
       uses: actions/upload-artifact@v3
