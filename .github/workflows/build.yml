@@ -11,10 +11,10 @@ jobs:
 
     steps:
     - name: Checkout Code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4  # Updated to v4
 
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5  # Updated to v5
       with:
         python-version: '3.10'
 
@@ -24,10 +24,11 @@ jobs:
         pip install mido python-rtmidi pyinstaller
 
     - name: Compile EXE
-      run: pyinstaller --onefile --console sysex_test.py
+      # Make sure this matches your exact file name!
+      run: pyinstaller --onefile --console sysex_test.py 
 
     - name: Upload EXE Artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4  # Updated to v4
       with:
         name: XPS30-Controller-Windows
-        path: dist/xps30_engine.exe
+        path: dist/sysex_test.exe
