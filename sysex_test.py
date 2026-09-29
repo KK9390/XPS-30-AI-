@@ -4,17 +4,21 @@ import argparse
 
 class XPS30Engine:
     def __init__(self):
-        # 1. The Global Header for XPS-30
         self.header = [0x41, 0x10, 0x00, 0x00, 0x3A, 0x12]
         
-        # 2. The Exact XPS-30 Memory Map
         self.address_map = {
-            # --- PATCH MODE ---
             "patch_cutoff": [0x1F, 0x00, 0x00, 0x22],
             "patch_reverb": [0x1F, 0x00, 0x04, 0x01],
-            # --- PERFORMANCE MODE (PART 1) ---
             "perf_cutoff":  [0x10, 0x00, 0x20, 0x11],
             "perf_reverb":  [0x10, 0x00, 0x20, 0x1E]
+        }
+        
+        # --- THE HARDWARE COMPLIANCE RULES ---
+        self.rules = {
+            "patch_cutoff": {"min": -63, "max": 63,  "shift": 64},
+            "patch_reverb": {"min": 0,   "max": 127, "shift": 0},
+            "perf_cutoff":  {"min": -64, "max": 63,  "shift": 64},
+            "perf_reverb":  {"min": 0,   "max": 127, "shift": 0}
         }
 
     def calculate_checksum(self, payload):
@@ -22,15 +26,19 @@ class XPS30Engine:
         remainder = total_sum % 128
         return 0 if (128 - remainder) == 128 else (128 - remainder)
 
-    def get_message(self, param_name, value):
+    def get_message(self, param_name, user_value):
         if param_name not in self.address_map:
-            print(f"Error: I don't know the address for '{param_name}'")
             return None
             
-        address = self.address_map[param_name]
-        data = [value] if isinstance(value, int) else value
+        rule = self.rules[param_name]
+        
+        # 1. Compliance Check: Clamp the value to the exact XPS-30 limits
+        clamped_value = max(rule["min"], min(rule["max"], user_value))
+        
+        # 2. Hardware Translation: Convert negative screen values to SysEx payload bytes
+        sysex_byte = clamped_value + rule["shift"]
             
-        payload = address + data
+        payload = self.address_map[param_name] + [sysex_byte]
         checksum = self.calculate_checksum(payload)
         
         return mido.Message('sysex', data=self.header + payload + [checksum])
